@@ -1,7 +1,9 @@
+import secrets
 from flask import Flask
 from flask import render_template
 from flask import request
 from flask import redirect
+from flask import session
 from flask_cors import CORS
 import user_management as dbHandler
 
@@ -9,12 +11,18 @@ import user_management as dbHandler
 # app.logger.critical("message")
 
 app = Flask(__name__)
+app.secret_key = secrets.token_hex(32)  # Generate a random secret key
+app.config["SESSION_COOKIE_HTTPONLY"] = True  # Mitigate XSS attacks by preventing JavaScript access to cookies
+
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigate CSRF attacks by restricting cross-site cookie sending
 # Enable CORS to allow cross-origin requests (needed for CSRF demo in Codespaces)
 CORS(app)
 
 
 @app.route("/success.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
 def addFeedback():
+    if 'username' not in session:
+        return redirect("/")
     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
         return redirect(url, code=302)
@@ -47,6 +55,9 @@ def signup():
 @app.route("/", methods=["POST", "GET"])
 def home():
     # Simple Dynamic menu
+    if 'username' in session:
+        dbHandler.listFeedback()
+        return render_template("/success.html", state=True, value=session['username'])
     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
         return redirect(url, code=302)
@@ -59,12 +70,18 @@ def home():
         password = request.form["password"]
         isLoggedIn = dbHandler.retrieveUsers(username, password)
         if isLoggedIn:
+            session["username"] = username
             dbHandler.listFeedback()
             return render_template("/success.html", value=username, state=isLoggedIn)
         else:
             return render_template("/index.html")
     else:
         return render_template("/index.html")
+
+@app.route("/logout")
+def logout():
+    session.pop("username", None)  # Remove the username from the session
+    return redirect("/")  # Redirect to the home page after logout
 
 
 if __name__ == "__main__":

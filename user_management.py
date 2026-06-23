@@ -6,8 +6,7 @@ import bcrypt
 def insertUser(username, password, DoB):
     con = sql.connect("database_files/database.db")
     cur = con.cursor()
-    salt = b"$2b$12$ieYNkQp8QumgedUo30nuPO"
-    hashed_password = bcrypt.hashpw(password.encode("utf-8"), salt=salt)
+    hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
     cur.execute(
         "INSERT INTO users (username,password,dateOfBirth) VALUES (?,?,?)",
         (username, hashed_password, DoB),
@@ -19,14 +18,19 @@ def insertUser(username, password, DoB):
 def retrieveUsers(username, password):
     con = sql.connect("database_files/database.db")
     cur = con.cursor()
-    salt = b"$2b$12$ieYNkQp8QumgedUo30nuPO"
-    hashed_password = bcrypt.hashpw(password.encode("utf-8"), salt=salt)
     cur.execute(
-        "SELECT username, password FROM users WHERE username = ? AND password = ?", (username, hashed_password)
+        "SELECT password FROM users WHERE username = ?", (username,)
     )
-    data = cur.fetchone()
+    stored_hashed_password = cur.fetchone()
+    if stored_hashed_password:
+        hashed_value = stored_hashed_password[0]
+        if isinstance(hashed_value, str):
+            hashed_value = hashed_value.encode("utf-8")
+        hashed_password = bcrypt.checkpw(password.encode("utf-8"), hashed_value)
+    else:
+        hashed_password = False
     con.close()
-    if data:
+    if hashed_password:
         with open("visitor_log.txt", "r") as file:
             number = int(file.read().strip())
             number += 1
@@ -47,11 +51,6 @@ def insertFeedback(feedback):
 def listFeedback():
     con = sql.connect("database_files/database.db")
     cur = con.cursor()
-    data = cur.execute("SELECT * FROM feedback").fetchall()
+    data = cur.execute("SELECT feedback FROM feedback").fetchall()
     con.close()
-    f = open("templates/partials/success_feedback.html", "w")
-    for row in data:
-        f.write("<p>\n")
-        f.write(f"{row[1]}\n")
-        f.write("</p>\n")
-    f.close()
+    return [row[0] for row in data]
