@@ -1,3 +1,4 @@
+import re
 import secrets
 from flask import Flask
 from flask import render_template
@@ -18,6 +19,15 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigate CSRF attacks by restri
 # Enable CORS to allow cross-origin requests (needed for CSRF demo in Codespaces)
 CORS(app)
 
+def valid_username(username):
+    # 3-20 characters, letters/numbers/underscore only
+    return re.fullmatch(r"[A-Za-z0-9_]{3,20}", username) is not None
+
+def valid_password(password):
+    return 8<= len(password) <= 64
+
+def valid_feedback(feedback):
+    return 1 <= len(feedback) <= 500
 
 @app.route("/success.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
 def addFeedback():
@@ -28,6 +38,8 @@ def addFeedback():
         return redirect(url, code=302)
     if request.method == "POST":
         feedback = request.form["feedback"]
+        if not valid_feedback(feedback):
+            return render_template("/success.html", state=False, value="Back")
         dbHandler.insertFeedback(feedback)
         dbHandler.listFeedback()
         return render_template("/success.html", state=True, value="Back")
@@ -45,6 +57,8 @@ def signup():
         username = request.form["username"]
         password = request.form["password"]
         DoB = request.form["dob"]
+        if not valid_username(username) or not valid_password(password):
+            return render_template("/signup.html")
         dbHandler.insertUser(username, password, DoB)
         return render_template("/index.html")
     else:
@@ -68,6 +82,8 @@ def home():
     elif request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
+        if not valid_username(username) or not valid_password(password):
+            return render_template("/index.html", msg="Invalid username or password format.")
         isLoggedIn = dbHandler.retrieveUsers(username, password)
         if isLoggedIn:
             session["username"] = username
