@@ -21,7 +21,17 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True  # Mitigate XSS attacks by preventi
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)  
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigate CSRF attacks by restricting cross-site cookie sending
 # Enable CORS to allow cross-origin requests (needed for CSRF demo in Codespaces)
-CORS(app)
+CORS(app, origins=[
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+])
+ALLOWED_REDIRECTS = ["/", "/index.html", "/signup.html", "/success.html"] # Define allowed redirect URLs
+
+def safe_redirect(url):
+    if url in ALLOWED_REDIRECTS:
+        return redirect(url, code=302)
+    else:
+        return redirect("/", code=302)  # Redirect to home if URL is not allowed
 
 def valid_username(username):
     # 3-20 characters, letters/numbers/underscore only
@@ -36,10 +46,10 @@ def valid_feedback(feedback):
 @app.route("/success.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
 def addFeedback():
     if 'username' not in session:
-        return redirect("/")
+        return safe_redirect("/")
     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
-        return redirect(url, code=302)
+        return safe_redirect(url)
     if request.method == "POST":
         feedback = request.form["feedback"]
         if not valid_feedback(feedback):
@@ -56,7 +66,7 @@ def addFeedback():
 def signup():
     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
-        return redirect(url, code=302)
+        return safe_redirect(url)
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
@@ -78,7 +88,7 @@ def home():
         return render_template("/success.html", state=True, value=session['username'], feedback_items=feedback_items)
     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
-        return redirect(url, code=302)
+        return safe_redirect(url)
     # Pass message to front end
     elif request.method == "GET":
         msg = request.args.get("msg", "")
@@ -90,8 +100,9 @@ def home():
             return render_template("/index.html", msg="Invalid username or password format.")
         isLoggedIn = dbHandler.retrieveUsers(username, password)
         if isLoggedIn:
-            session["username"] = username
+            session.clear()  # Clear any existing session data to prevent session fixation
             session.permanent = True 
+            session["username"] = username
             feedback_items = dbHandler.listFeedback()
             return render_template("/success.html", value=username, state=isLoggedIn, feedback_items=feedback_items)
         else:
@@ -102,7 +113,7 @@ def home():
 @app.route("/logout")
 def logout():
     session.pop("username", None)  # Remove the username from the session
-    return redirect("/")  # Redirect to the home page after logout
+    return safe_redirect("/")  # Redirect to the home page after logout
 
 
 if __name__ == "__main__":
