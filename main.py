@@ -1,3 +1,4 @@
+from datetime import timedelta
 import re
 import secrets
 from flask import Flask
@@ -5,16 +6,19 @@ from flask import render_template
 from flask import request
 from flask import redirect
 from flask import session
+from flask_wtf.csrf import CSRFProtect
 from flask_cors import CORS
 import user_management as dbHandler
 
 # Code snippet for logging a message
 # app.logger.critical("message")
 
+
 app = Flask(__name__)
+csrf = CSRFProtect(app)
 app.secret_key = secrets.token_hex(32)  # Generate a random secret key
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # Mitigate XSS attacks by preventing JavaScript access to cookies
-
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)  
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigate CSRF attacks by restricting cross-site cookie sending
 # Enable CORS to allow cross-origin requests (needed for CSRF demo in Codespaces)
 CORS(app)
@@ -39,13 +43,13 @@ def addFeedback():
     if request.method == "POST":
         feedback = request.form["feedback"]
         if not valid_feedback(feedback):
-            return render_template("/success.html", state=False, value="Back")
+            return render_template("/success.html", state=False, value="Back", feedback_items=dbHandler.listFeedback())
         dbHandler.insertFeedback(feedback)
-        dbHandler.listFeedback()
-        return render_template("/success.html", state=True, value="Back")
+        feedback_items = dbHandler.listFeedback()
+        return render_template("/success.html", state=True, value="Back", feedback_items=feedback_items)
     else:
-        dbHandler.listFeedback()
-        return render_template("/success.html", state=True, value="Back")
+        feedback_items = dbHandler.listFeedback()
+        return render_template("/success.html", state=True, value="Back", feedback_items=feedback_items)
 
 
 @app.route("/signup.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
@@ -70,8 +74,8 @@ def signup():
 def home():
     # Simple Dynamic menu
     if 'username' in session:
-        dbHandler.listFeedback()
-        return render_template("/success.html", state=True, value=session['username'])
+        feedback_items = dbHandler.listFeedback()
+        return render_template("/success.html", state=True, value=session['username'], feedback_items=feedback_items)
     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
         return redirect(url, code=302)
@@ -87,8 +91,9 @@ def home():
         isLoggedIn = dbHandler.retrieveUsers(username, password)
         if isLoggedIn:
             session["username"] = username
-            dbHandler.listFeedback()
-            return render_template("/success.html", value=username, state=isLoggedIn)
+            session.permanent = True 
+            feedback_items = dbHandler.listFeedback()
+            return render_template("/success.html", value=username, state=isLoggedIn, feedback_items=feedback_items)
         else:
             return render_template("/index.html")
     else:
