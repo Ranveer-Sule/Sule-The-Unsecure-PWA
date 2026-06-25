@@ -1,0 +1,11 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h1>Enter your 6-digit code</h1>
+{% if msg %}<p>{{ msg }}</p>{% endif %}
+<form action="/verify_2fa" method="POST" class="box">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="otp" inputmode="numeric" pattern="[0-9]{6}" 
+        maxlength="6" autocomplete="off" placeholder="Enter 6-digit code" class="input__field" required>
+    <button type="submit" class="btn">Verify</button>
+</form>
+{% endblock %}

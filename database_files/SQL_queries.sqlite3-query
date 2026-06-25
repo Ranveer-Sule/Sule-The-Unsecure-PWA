@@ -15,3 +15,5 @@
 -- DELETE FROM feedback WHERE id > 12;
 
 -- DELETE FROM users WHERE id > 19;
+
+--ALTER TABLE users ADD COLUMN secret TEXT;

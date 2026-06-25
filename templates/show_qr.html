@@ -1,0 +1,7 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h1>Set up Two-Factor Authentication</h1>
+<p>Scan this QR code with Google Authenticator or any alternative, then log in.</p>
+<img src="data:image/png;base64,{{ qr_code }}" alt="2FA QR code">
+<p><a href="/">Back to Login</a></p>
+{% endblock %}

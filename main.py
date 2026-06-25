@@ -13,9 +13,10 @@ from flask_wtf.csrf import CSRFProtect
 from flask_csp.csp import create_csp_header, csp_header
 from flask_cors import CORS
 import user_management as dbHandler
-
-# Code snippet for logging a message
-# app.logger.critical("message")
+import pyotp
+import qrcode
+import base64
+from io import BytesIO
 
 
 app = Flask(__name__)
@@ -42,9 +43,17 @@ MAX_ATTEMPTS = 5  # Maximum allowed login attempts
 LOCKOUT_TIME = timedelta(minutes=5)  # Lockout duration after exceeding max attempts
 CSP_POLICY = {
     "default-src": "'self'",
+    "img-src": "'self' data:",
     "frame-ancestors": "'none'",
     "report-uri" : "",
 }
+
+def make_qr_b64(uri):
+    img = qrcode.make(uri)
+    stream = BytesIO()
+    img.save(stream, format="PNG")
+    return base64.b64encode(stream.getvalue()).decode("utf-8")
+
 
 # Function to check if a username is currently locked out due to too many failed login attempts
 def is_locked_out(username):
@@ -112,8 +121,10 @@ def signup():
         DoB = request.form["dob"]
         if not valid_username(username) or not valid_password(password):
             return render_template("/signup.html", max_dob=max_dob, msg="Invalid username or password format.")
-        dbHandler.insertUser(username, password, DoB)
-        return render_template("/index.html")
+        secret = dbHandler.insertUser(username, password, DoB)
+        uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name="Unsecure PWA")
+        qr_code = make_qr_b64(uri)
+        return render_template("show_qr.html", secret=secret, qr_code=qr_code)
     else:
         return render_template("/signup.html", max_dob=max_dob)
 
@@ -147,10 +158,8 @@ def home():
         if isLoggedIn:
             login_attempts.pop(username, None)  # Reset failed attempts on successful login
             session.clear()  # Clear any existing session data to prevent session fixation
-            session.permanent = True 
-            session["username"] = username
-            feedback_items = dbHandler.listFeedback()
-            return render_template("/success.html", value=username, state=isLoggedIn, feedback_items=feedback_items)
+            session["pending_2fa"] = username
+            return redirect("/verify_2fa")
         else:
             record_failed_attempt(username)
             return render_template("/index.html", msg="Invalid username or password.")
@@ -177,6 +186,23 @@ def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"  # Prevent MIME type sniffing
     response.headers["X-Frame-Options"] = "DENY"  # Prevent clickjacking
     return response
+
+@app.route("/verify_2fa", methods=["GET", "POST"])
+def verify_2fa():
+    username = session.get("pending_2fa")
+    if not username:
+        return redirect("/")  # Redirect to home if no pending 2FA session
+    if request.method == "POST":
+        otp = request.form['otp']
+        secret = dbHandler.getUserSecret(username)
+        if secret and pyotp.TOTP(secret).verify(otp):
+            session.clear()
+            session.permanent = True
+            session["username"] = username
+            return redirect("/success.html")
+        else:
+            return render_template("/verify_2fa.html", msg="Invalid Code. Please try again.")
+    return render_template("/verify_2fa.html")
 
 if __name__ == "__main__":
     app.config["TEMPLATES_AUTO_RELOAD"] = True

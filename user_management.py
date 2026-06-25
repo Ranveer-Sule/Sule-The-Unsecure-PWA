@@ -2,17 +2,20 @@ import sqlite3 as sql
 import time
 import random
 import bcrypt
+import pyotp
 
 def insertUser(username, password, DoB):
     con = sql.connect("database_files/database.db")
     cur = con.cursor()
     hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+    secret = pyotp.random_base32()  
     cur.execute(
-        "INSERT INTO users (username,password,dateOfBirth) VALUES (?,?,?)",
-        (username, hashed_password, DoB),
+        "INSERT INTO users (username,password,dateOfBirth,secret) VALUES (?,?,?,?)",
+        (username, hashed_password, DoB, secret),
     )
     con.commit()
     con.close()
+    return secret
 
 
 def retrieveUsers(username, password):
@@ -54,3 +57,13 @@ def listFeedback():
     data = cur.execute("SELECT feedback FROM feedback").fetchall()
     con.close()
     return [row[0] for row in data]
+
+def getUserSecret(username):
+    con = sql.connect("database_files/database.db")
+    cur = con.cursor()
+    cur.execute("SELECT secret FROM users WHERE username = ?", (username,))
+    row = cur.fetchone()
+    con.close()
+    if row:
+        return row[0]
+    return None

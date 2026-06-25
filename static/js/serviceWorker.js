@@ -46,6 +46,11 @@ self.addEventListener("activate", function (evt) {
 });
 
 self.addEventListener("fetch", function (evt) {
+  // Never intercept POST/PUT etc. - let the browser handle them once
+  if (evt.request.method !== "GET") {
+    return;
+  }
+  // respondWith makes THIS the response, so the browser doesn't fetch again
   evt.respondWith(
     fetch(evt.request).catch(() => {
       return caches.open(CATALOGUE_ASSETS).then((cache) => {
@@ -53,4 +58,4 @@ self.addEventListener("fetch", function (evt) {
       });
     })
   );
-})
+});
