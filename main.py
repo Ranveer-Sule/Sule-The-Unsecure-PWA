@@ -1,5 +1,6 @@
 from datetime import timedelta
 from datetime import date
+import time
 import logging
 import re
 import secrets
@@ -9,6 +10,7 @@ from flask import request
 from flask import redirect
 from flask import session
 from flask_wtf.csrf import CSRFProtect
+from flask_csp.csp import create_csp_header, csp_header
 from flask_cors import CORS
 import user_management as dbHandler
 
@@ -26,6 +28,7 @@ logging.getLogger("werkzeug").setLevel(logging.ERROR)
 csrf = CSRFProtect(app)
 app.secret_key = secrets.token_hex(32)  # Generate a random secret key
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # Mitigate XSS attacks by preventing JavaScript access to cookies
+app.config["SESSION_COOKIE_SECURE"] = True  # Ensure cookies are only sent over HTTPS
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)  
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigate CSRF attacks by restricting cross-site cookie sending
 # Enable CORS to allow cross-origin requests (needed for CSRF demo in Codespaces)
@@ -34,13 +37,39 @@ CORS(app, origins=[
     "http://127.0.0.1:5500",
 ])
 ALLOWED_REDIRECTS = ["/", "/index.html", "/signup.html", "/success.html"] # Define allowed redirect URLs
+login_attempts = {}  # Dictionary to track login attempts
+MAX_ATTEMPTS = 5  # Maximum allowed login attempts
+LOCKOUT_TIME = timedelta(minutes=5)  # Lockout duration after exceeding max attempts
+CSP_POLICY = {
+    "default-src": "'self'",
+    "frame-ancestors": "'none'",
+    "report-uri" : "",
+}
 
+# Function to check if a username is currently locked out due to too many failed login attempts
+def is_locked_out(username):
+    if username in login_attempts:
+        locked_until = login_attempts[username][1]
+        if time.time() < locked_until:
+            return True
+    return False
+
+# Function to record a failed login attempt for a given username
+def record_failed_attempt(username):
+    if username not in login_attempts:
+        login_attempts[username] = [0, 0]
+    login_attempts[username][0] += 1 # Add 1 to the count of failed attempts
+    if login_attempts[username][0] >= MAX_ATTEMPTS:
+        login_attempts[username][1] = time.time() + LOCKOUT_TIME.total_seconds()
+
+# Function to redirect users safely to allowed URLs, preventing open redirect vulnerabilities
 def safe_redirect(url):
     if url in ALLOWED_REDIRECTS:
         return redirect(url, code=302)
     else:
         return redirect("/", code=302)  # Redirect to home if URL is not allowed
 
+# Validation functions for user input
 def valid_username(username):
     # 3-20 characters, letters/numbers/underscore only
     return re.fullmatch(r"[A-Za-z0-9_]{3,20}", username) is not None
@@ -108,18 +137,22 @@ def home():
         password = request.form["password"]
         if not valid_username(username) or not valid_password(password):
             return render_template("/index.html", msg="Invalid username or password.")
+        if is_locked_out(username):
+            return render_template("/index.html", msg="Too many failed login attempts. Please try again later.")
         try:
             isLoggedIn = dbHandler.retrieveUsers(username, password)
         except Exception as e:
             app.logger.error("Login Check failed: %s", e, exc_info=True)
             isLoggedIn = False
         if isLoggedIn:
+            login_attempts.pop(username, None)  # Reset failed attempts on successful login
             session.clear()  # Clear any existing session data to prevent session fixation
             session.permanent = True 
             session["username"] = username
             feedback_items = dbHandler.listFeedback()
             return render_template("/success.html", value=username, state=isLoggedIn, feedback_items=feedback_items)
         else:
+            record_failed_attempt(username)
             return render_template("/index.html", msg="Invalid username or password.")
     else:
         return render_template("/index.html")
@@ -138,7 +171,14 @@ def server_error(e):
 def not_found_error(e):
     return render_template("/index.html", msg="Page not found."), 404
 
+@app.after_request
+def set_security_headers(response):
+    response.headers["Content-Security-Policy"] = create_csp_header(CSP_POLICY)  # Apply the Content Security Policy
+    response.headers["X-Content-Type-Options"] = "nosniff"  # Prevent MIME type sniffing
+    response.headers["X-Frame-Options"] = "DENY"  # Prevent clickjacking
+    return response
+
 if __name__ == "__main__":
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
-    app.run(debug=False, host="0.0.0.0", port=5500)
+    app.run(debug=False, host="0.0.0.0", port=5500, ssl_context="adhoc", threaded=True)  # Use adhoc SSL context for HTTPS
