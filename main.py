@@ -1,4 +1,6 @@
 from datetime import timedelta
+from datetime import date
+import logging
 import re
 import secrets
 from flask import Flask
@@ -15,6 +17,12 @@ import user_management as dbHandler
 
 
 app = Flask(__name__)
+logging.basicConfig(
+    filename="app_errors.log",
+    level=logging.ERROR,
+    format="%(asctime)s %(levelname)s: %(message)s",
+)
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
 csrf = CSRFProtect(app)
 app.secret_key = secrets.token_hex(32)  # Generate a random secret key
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # Mitigate XSS attacks by preventing JavaScript access to cookies
@@ -64,6 +72,8 @@ def addFeedback():
 
 @app.route("/signup.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
 def signup():
+    today = date.today()
+    max_dob = today.replace(year=today.year - 13)  # Users must be at least 13 years old
     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
         return safe_redirect(url)
@@ -72,11 +82,11 @@ def signup():
         password = request.form["password"]
         DoB = request.form["dob"]
         if not valid_username(username) or not valid_password(password):
-            return render_template("/signup.html")
+            return render_template("/signup.html", max_dob=max_dob, msg="Invalid username or password format.")
         dbHandler.insertUser(username, password, DoB)
         return render_template("/index.html")
     else:
-        return render_template("/signup.html")
+        return render_template("/signup.html", max_dob=max_dob)
 
 
 @app.route("/index.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
@@ -97,8 +107,12 @@ def home():
         username = request.form["username"]
         password = request.form["password"]
         if not valid_username(username) or not valid_password(password):
-            return render_template("/index.html", msg="Invalid username or password format.")
-        isLoggedIn = dbHandler.retrieveUsers(username, password)
+            return render_template("/index.html", msg="Invalid username or password.")
+        try:
+            isLoggedIn = dbHandler.retrieveUsers(username, password)
+        except Exception as e:
+            app.logger.error("Login Check failed: %s", e, exc_info=True)
+            isLoggedIn = False
         if isLoggedIn:
             session.clear()  # Clear any existing session data to prevent session fixation
             session.permanent = True 
@@ -106,7 +120,7 @@ def home():
             feedback_items = dbHandler.listFeedback()
             return render_template("/success.html", value=username, state=isLoggedIn, feedback_items=feedback_items)
         else:
-            return render_template("/index.html")
+            return render_template("/index.html", msg="Invalid username or password.")
     else:
         return render_template("/index.html")
 
@@ -115,8 +129,16 @@ def logout():
     session.pop("username", None)  # Remove the username from the session
     return safe_redirect("/")  # Redirect to the home page after logout
 
+@app.errorhandler(500)
+def server_error(e):
+    app.logger.error("Server Error: %s", e, exc_info=True)
+    return render_template("/index.html", msg="An internal server error occurred. Please try again later."), 500
+
+@app.errorhandler(404)
+def not_found_error(e):
+    return render_template("/index.html", msg="Page not found."), 404
 
 if __name__ == "__main__":
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
-    app.run(debug=True, host="0.0.0.0", port=5500)
+    app.run(debug=False, host="0.0.0.0", port=5500)
