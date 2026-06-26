@@ -1,10 +1,6 @@
 import sqlite3 as sql
 from cryptography.fernet import Fernet
-import time
-import random
-import secrets
-import bcrypt
-import pyotp
+import secrets, bcrypt, pyotp
 
 with open('encryption.key', 'rb') as key_file:
     fernet = Fernet(key_file.read())
@@ -111,3 +107,19 @@ def useRecoveryCode(username, code):
             return True
     con.close()
     return False
+
+def getUserData(username):
+    con = sql.connect("database_files/database.db")
+    cur = con.cursor()
+    cur.execute("SELECT id, username, dateOfBirth FROM users WHERE username = ?", (username,))
+    row = cur.fetchone()
+    con.close()
+    return row
+
+def deleteUser(username):
+    con = sql.connect("database_files/database.db")
+    cur = con.cursor()
+    cur.execute("DELETE FROM users WHERE username = ?", (username,))
+    cur.execute("DELETE FROM recovery_codes WHERE username = ?", (username,))
+    con.commit()
+    con.close()

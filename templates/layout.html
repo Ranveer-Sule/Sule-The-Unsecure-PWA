@@ -15,10 +15,12 @@
             <img src="static\images\logo.svg" alt="The unsecure website logo." />
             <h1>The Unsecure PWA</h1>
             <ul class="topnav">
-                <li><a href="?url=/">Home</a></li>
-                <li><a href="?url=/signup.html">Signup</a></li>
+                <li><a href="/">Home</a></li>
+                <li><a href="/signup.html">Signup</a></li>
+                <li><a href="/privacy">Privacy Policy</a></li>
                 {% if state %}
-                    <li><a href="?url=/success.html">Success</a></li>
+                    <li><a href="/success.html">Success</a></li>
+                    <li><a href="/my_data">My Data</a></li>
                     <li><a href="/logout">Logout</a></li>
                 {% endif %}
             </ul>

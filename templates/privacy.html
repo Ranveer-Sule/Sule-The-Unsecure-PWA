@@ -1,0 +1,29 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h1>Privacy Policy</h1>
+
+<p><strong>What information we collect:</strong>
+    your username, your password (stored hashed with bcrypt, never in plain text),
+    your date of birth (used only to confirm you are 13 or older), a two-factor
+    authentication secret (stored encrypted), and backup recovery codes (stored hashed).</p>
+
+<p><strong>Feedback:</strong> any feedback you submit is stored anonymously. It is not
+    linked to your account or any other personal information, so we cannot identify who
+    left a particular piece of feedback.</p>
+
+<p><strong>Why we collect it:</strong> to create and secure your account. We do not share
+    or sell your data.</p>
+
+<p><strong>How long we keep it:</strong> we retain your account information for as long as
+    your account is active, and delete it when you delete your account. Private error logs
+    are kept for a maximum of 30 days and then cleared. Anonymous feedback may be retained
+    to help improve the service.</p>
+
+<p><strong>How we protect it:</strong> your data is transmitted over HTTPS, passwords and
+    recovery codes are hashed, and two-factor secrets are encrypted at rest.</p>
+
+<p><strong>Your rights:</strong> you can view the data we hold about you and permanently
+    delete your account at any time from your <a href="/my_data">My Data</a> page. Because
+    feedback is stored anonymously, it cannot be individually identified or removed once
+    submitted.</p>
+{% endblock %}

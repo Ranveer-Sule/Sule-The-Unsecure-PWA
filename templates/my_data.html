@@ -1,0 +1,13 @@
+{% extends 'layout.html' %}
+{% block content %}
+<h1>My Data</h1>
+<p>Account ID: {{ data[0] }}</p>
+<p>Username: {{ data[1] }}</p>
+<p>Date of Birth: {{ data[2] }}</p>
+
+<p>This permanently deletes your account and all associated data.</p>
+<form action="/delete_account" method="POST" class="box">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn">Delete Account</button>
+</form>
+{% endblock %}

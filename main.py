@@ -1,21 +1,11 @@
-from datetime import timedelta
-from datetime import date
-import time
-import logging
-import re
-import secrets
-from flask import Flask
-from flask import render_template
-from flask import request
-from flask import redirect
-from flask import session
+from datetime import timedelta, date
+import time, logging, re, os, secrets, base64, pyotp, qrcode
+from flask import Flask, render_template, request, redirect, session
 from flask_wtf.csrf import CSRFProtect
-from flask_csp.csp import create_csp_header, csp_header
+from flask_csp.csp import create_csp_header
 from flask_cors import CORS
 import user_management as dbHandler
-import pyotp
-import qrcode
-import base64
+from urllib.parse import urlparse
 from io import BytesIO
 
 
@@ -48,6 +38,15 @@ CSP_POLICY = {
     "report-uri" : "",
 }
 
+
+def apply_retention():
+    log = "app_errors.log"
+    if os.path.exists(log):
+        age_days = (time.time() - os.path.getmtime(log)) / 86400
+        if age_days > 30:
+            open(log, "w").close()  
+
+
 def make_qr_b64(uri):
     img = qrcode.make(uri)
     stream = BytesIO()
@@ -73,7 +72,7 @@ def record_failed_attempt(username):
 
 # Function to redirect users safely to allowed URLs, preventing open redirect vulnerabilities
 def safe_redirect(url):
-    if url in ALLOWED_REDIRECTS:
+    if urlparse(url).path in ALLOWED_REDIRECTS:
         return redirect(url, code=302)
     else:
         return redirect("/", code=302)  # Redirect to home if URL is not allowed
@@ -207,7 +206,28 @@ def verify_2fa():
             return render_template("/verify_2fa.html", msg="Invalid Code. Please try again.")
     return render_template("/verify_2fa.html")
 
+@app.route("/privacy")
+def privacy():
+    return render_template("/privacy.html")
+
+@app.route("/my_data")
+def my_data():
+    if 'username' not in session:
+        return safe_redirect("/")
+    data = dbHandler.getUserData(session['username'])
+    return render_template("/my_data.html", data=data)
+
+@app.route("/delete_account", methods=["POST"])
+def delete_account():
+    if 'username' not in session:
+        return safe_redirect("/")
+    dbHandler.deleteUser(session['username'])
+    session.clear()
+    return safe_redirect("/?msg=Your account has been deleted successfully.")
+
+
 if __name__ == "__main__":
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+    apply_retention()  # Apply log retention policy on startup
     app.run(debug=False, host="0.0.0.0", port=5500, ssl_context="adhoc", threaded=True)  # Use adhoc SSL context for HTTPS
