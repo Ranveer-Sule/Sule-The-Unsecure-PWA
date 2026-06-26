@@ -17,3 +17,8 @@
 -- DELETE FROM users WHERE id > 19;
 
 --ALTER TABLE users ADD COLUMN secret TEXT;
+
+--CREATE TABLE recovery_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+--        username TEXT NOT NULL, 
+--        code_hash TEXT NOT NULL, 
+--        used INTEGER DEFAULT 0)

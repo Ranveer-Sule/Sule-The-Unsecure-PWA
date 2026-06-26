@@ -37,7 +37,7 @@ CORS(app, origins=[
     "http://localhost:5500",
     "http://127.0.0.1:5500",
 ])
-ALLOWED_REDIRECTS = ["/", "/index.html", "/signup.html", "/success.html"] # Define allowed redirect URLs
+ALLOWED_REDIRECTS = ["/", "/index.html", "/signup.html", "/success.html", "/verify_2fa"] # Define allowed redirect URLs
 login_attempts = {}  # Dictionary to track login attempts
 MAX_ATTEMPTS = 5  # Maximum allowed login attempts
 LOCKOUT_TIME = timedelta(minutes=5)  # Lockout duration after exceeding max attempts
@@ -122,9 +122,10 @@ def signup():
         if not valid_username(username) or not valid_password(password):
             return render_template("/signup.html", max_dob=max_dob, msg="Invalid username or password format.")
         secret = dbHandler.insertUser(username, password, DoB)
+        recovery_codes = dbHandler.generateRecoveryCodes(username)
         uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name="Unsecure PWA")
         qr_code = make_qr_b64(uri)
-        return render_template("show_qr.html", secret=secret, qr_code=qr_code)
+        return render_template("show_qr.html", secret=secret, qr_code=qr_code, recovery_codes=recovery_codes)
     else:
         return render_template("/signup.html", max_dob=max_dob)
 
@@ -159,7 +160,7 @@ def home():
             login_attempts.pop(username, None)  # Reset failed attempts on successful login
             session.clear()  # Clear any existing session data to prevent session fixation
             session["pending_2fa"] = username
-            return redirect("/verify_2fa")
+            return safe_redirect("/verify_2fa")
         else:
             record_failed_attempt(username)
             return render_template("/index.html", msg="Invalid username or password.")
@@ -184,6 +185,8 @@ def not_found_error(e):
 def set_security_headers(response):
     response.headers["Content-Security-Policy"] = create_csp_header(CSP_POLICY)  # Apply the Content Security Policy
     response.headers["X-Content-Type-Options"] = "nosniff"  # Prevent MIME type sniffing
+    response.headers["X-XSS-Protection"] = "1; mode=block"  # Enable XSS protection in browsers
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-Frame-Options"] = "DENY"  # Prevent clickjacking
     return response
 
@@ -191,15 +194,15 @@ def set_security_headers(response):
 def verify_2fa():
     username = session.get("pending_2fa")
     if not username:
-        return redirect("/")  # Redirect to home if no pending 2FA session
+        return safe_redirect("/")  # Redirect to home if no pending 2FA session
     if request.method == "POST":
         otp = request.form['otp']
         secret = dbHandler.getUserSecret(username)
-        if secret and pyotp.TOTP(secret).verify(otp):
+        if secret and pyotp.TOTP(secret).verify(otp) or dbHandler.useRecoveryCode(username, otp):
             session.clear()
             session.permanent = True
             session["username"] = username
-            return redirect("/success.html")
+            return safe_redirect("/success.html")
         else:
             return render_template("/verify_2fa.html", msg="Invalid Code. Please try again.")
     return render_template("/verify_2fa.html")

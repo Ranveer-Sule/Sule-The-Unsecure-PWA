@@ -3,5 +3,14 @@
 <h1>Set up Two-Factor Authentication</h1>
 <p>Scan this QR code with Google Authenticator or any alternative, then log in.</p>
 <img src="data:image/png;base64,{{ qr_code }}" alt="2FA QR code">
+{% if recovery_codes %}
+<h2>Save your recovery codes</h2>
+<p>These codes can be used to log in if you lose access to your authenticator app. Each code can only be used once.</p>
+    <ul>
+        {% for code in recovery_codes %}
+        <li>{{ code }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
 <p><a href="/">Back to Login</a></p>
 {% endblock %}
