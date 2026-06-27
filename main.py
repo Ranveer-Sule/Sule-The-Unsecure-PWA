@@ -18,6 +18,7 @@ logging.basicConfig(
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 csrf = CSRFProtect(app)
 app.secret_key = secrets.token_hex(32)  # Generate a random secret key
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024  # Limit request size to 1MB
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # Mitigate XSS attacks by preventing JavaScript access to cookies
 app.config["SESSION_COOKIE_SECURE"] = True  # Ensure cookies are only sent over HTTPS
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)  
@@ -27,7 +28,7 @@ CORS(app, origins=[
     "http://localhost:5500",
     "http://127.0.0.1:5500",
 ])
-ALLOWED_REDIRECTS = ["/", "/index.html", "/signup.html", "/success.html", "/verify_2fa"] # Define allowed redirect URLs
+ALLOWED_REDIRECTS = ["/", "/index.html", "/signup.html", "/success.html", "/verify_2fa", "/my_data"] # Define allowed redirect URLs
 login_attempts = {}  # Dictionary to track login attempts
 MAX_ATTEMPTS = 5  # Maximum allowed login attempts
 LOCKOUT_TIME = timedelta(minutes=5)  # Lockout duration after exceeding max attempts
@@ -83,7 +84,17 @@ def valid_username(username):
     return re.fullmatch(r"[A-Za-z0-9_]{3,20}", username) is not None
 
 def valid_password(password):
-    return 8<= len(password) <= 64
+    if not (8<= len(password) <= 64):
+        return False
+    if not re.search(r"[A-Z]", password):
+        return False
+    if not re.search(r"[a-z]", password):
+        return False
+    if not re.search(r"[0-9]", password):
+        return False
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False
+    return True
 
 def valid_feedback(feedback):
     return 1 <= len(feedback) <= 500
@@ -118,9 +129,13 @@ def signup():
         username = request.form["username"]
         password = request.form["password"]
         DoB = request.form["dob"]
+        if not request.form.get("consent"):
+           return render_template("/signup.html", max_dob=max_dob, msg="You must agree to the Privacy Policy and data collection to sign up.")
         if not valid_username(username) or not valid_password(password):
             return render_template("/signup.html", max_dob=max_dob, msg="Invalid username or password format.")
         secret = dbHandler.insertUser(username, password, DoB)
+        if secret is None:
+            return render_template("/signup.html", max_dob=max_dob, msg="Username already exists. Please choose another.")
         recovery_codes = dbHandler.generateRecoveryCodes(username)
         uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name="Unsecure PWA")
         qr_code = make_qr_b64(uri)
@@ -185,8 +200,9 @@ def set_security_headers(response):
     response.headers["Content-Security-Policy"] = create_csp_header(CSP_POLICY)  # Apply the Content Security Policy
     response.headers["X-Content-Type-Options"] = "nosniff"  # Prevent MIME type sniffing
     response.headers["X-XSS-Protection"] = "1; mode=block"  # Enable XSS protection in browsers
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"  # Enforce HTTPS for one year
     response.headers["X-Frame-Options"] = "DENY"  # Prevent clickjacking
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"  # Mitigate cross-origin attacks
     return response
 
 @app.route("/verify_2fa", methods=["GET", "POST"])
@@ -217,6 +233,13 @@ def my_data():
     data = dbHandler.getUserData(session['username'])
     return render_template("/my_data.html", data=data)
 
+@app.route("/update_data", methods=["POST"])
+def update_data():
+    if 'username' not in session:
+        return safe_redirect("/")
+    dbHandler.updateUserDoB(session['username'], request.form["dob"])
+    return safe_redirect("/my_data")
+
 @app.route("/delete_account", methods=["POST"])
 def delete_account():
     if 'username' not in session:
@@ -230,4 +253,4 @@ if __name__ == "__main__":
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     apply_retention()  # Apply log retention policy on startup
-    app.run(debug=False, host="0.0.0.0", port=5500, ssl_context="adhoc", threaded=True)  # Use adhoc SSL context for HTTPS
+    app.run(debug=False, host="127.0.0.1", port=5500, ssl_context="adhoc", threaded=True)  # Use adhoc SSL context for HTTPS

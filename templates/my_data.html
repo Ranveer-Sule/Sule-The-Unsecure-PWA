@@ -5,6 +5,14 @@
 <p>Username: {{ data[1] }}</p>
 <p>Date of Birth: {{ data[2] }}</p>
 
+<h2>Correct my data</h2>
+<form action="/update_data" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="date" name="dob" required>
+    <button type="submit" class="btn">Update date of birth</button>
+</form>
+
+
 <p>This permanently deletes your account and all associated data.</p>
 <form action="/delete_account" method="POST" class="box">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

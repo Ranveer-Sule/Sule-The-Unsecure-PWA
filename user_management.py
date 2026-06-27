@@ -1,7 +1,8 @@
 import sqlite3 as sql
 from cryptography.fernet import Fernet
-import secrets, bcrypt, pyotp
+import secrets, bcrypt, pyotp, threading
 
+visitor_lock = threading.Lock()  # Create a lock for thread-safe visitor count updates
 with open('encryption.key', 'rb') as key_file:
     fernet = Fernet(key_file.read())
 
@@ -11,11 +12,15 @@ def insertUser(username, password, DoB):
     hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
     secret = pyotp.random_base32()  
     encrypted_secret = fernet.encrypt(secret.encode("utf-8")).decode("utf-8")
-    cur.execute(
-        "INSERT INTO users (username,password,dateOfBirth,secret) VALUES (?,?,?,?)",
-        (username, hashed_password, DoB, encrypted_secret),
-    )
-    con.commit()
+    try:
+        cur.execute(
+            "INSERT INTO users (username,password,dateOfBirth,secret) VALUES (?,?,?,?)",
+            (username, hashed_password, DoB, encrypted_secret),
+        )
+        con.commit()
+    except sql.IntegrityError:
+        con.close()
+        return None  # Username already exists
     con.close()
     return secret
 
@@ -36,11 +41,12 @@ def retrieveUsers(username, password):
         hashed_password = False
     con.close()
     if hashed_password:
-        with open("visitor_log.txt", "r") as file:
-            number = int(file.read().strip())
-            number += 1
-        with open("visitor_log.txt", "w") as file:
-            file.write(str(number))        
+        with visitor_lock:
+            with open("visitor_log.txt", "r") as file:
+                number = int(file.read().strip())
+                number += 1
+            with open("visitor_log.txt", "w") as file:
+                file.write(str(number))        
         return True
     else:        return False
 
@@ -53,10 +59,12 @@ def insertFeedback(feedback):
     con.close()
 
 
-def listFeedback():
+def listFeedback(limit=50):
     con = sql.connect("database_files/database.db")
     cur = con.cursor()
-    data = cur.execute("SELECT feedback FROM feedback").fetchall()
+    data = cur.execute(
+        "SELECT feedback FROM feedback ORDER BY id DESC LIMIT ?", (limit,)
+    ).fetchall()
     con.close()
     return [row[0] for row in data]
 
@@ -99,14 +107,14 @@ def useRecoveryCode(username, code):
         if isinstance(code_hash, str):
             code_hash = code_hash.encode("utf-8")
         if bcrypt.checkpw(code.encode("utf-8"), code_hash):
-            cur.execute(
-                "UPDATE recovery_codes SET used = 1 WHERE id = ?", (row_id,)
-            )
+            cur.execute("UPDATE recovery_codes SET used = 1 WHERE id = ? AND used = 0", (row_id,))
             con.commit()
-            con.close()
-            return True
-    con.close()
-    return False
+            if cur.rowcount == 1:
+                con.close()
+                return True
+            else:
+                con.close()
+                return False
 
 def getUserData(username):
     con = sql.connect("database_files/database.db")
@@ -121,5 +129,12 @@ def deleteUser(username):
     cur = con.cursor()
     cur.execute("DELETE FROM users WHERE username = ?", (username,))
     cur.execute("DELETE FROM recovery_codes WHERE username = ?", (username,))
+    con.commit()
+    con.close()
+
+def updateUserDoB(username, new_DoB):
+    con = sql.connect("database_files/database.db")
+    cur = con.cursor()
+    cur.execute("UPDATE users SET dateOfBirth = ? WHERE username = ?", (new_DoB, username))
     con.commit()
     con.close()

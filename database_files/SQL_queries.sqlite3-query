@@ -22,3 +22,5 @@
 --        username TEXT NOT NULL, 
 --        code_hash TEXT NOT NULL, 
 --        used INTEGER DEFAULT 0)
+
+--CREATE UNIQUE INDEX IF NOT EXISTS idx_username ON users(username);
