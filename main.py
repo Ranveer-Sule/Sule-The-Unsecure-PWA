@@ -25,8 +25,8 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=10)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigate CSRF attacks by restricting cross-site cookie sending
 # Enable CORS to allow cross-origin requests (needed for CSRF demo in Codespaces)
 CORS(app, origins=[
-    "http://localhost:5500",
-    "http://127.0.0.1:5500",
+    "https://localhost:5500",
+    "https://127.0.0.1:5500",
 ])
 ALLOWED_REDIRECTS = ["/", "/index.html", "/signup.html", "/success.html", "/verify_2fa", "/my_data"] # Define allowed redirect URLs
 login_attempts = {}  # Dictionary to track login attempts
