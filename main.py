@@ -7,6 +7,7 @@ from flask_cors import CORS
 import user_management as dbHandler
 from urllib.parse import urlparse
 from io import BytesIO
+from werkzeug.serving import WSGIRequestHandler
 
 
 app = Flask(__name__)
@@ -15,6 +16,8 @@ logging.basicConfig(
     level=logging.ERROR,
     format="%(asctime)s %(levelname)s: %(message)s",
 )
+WSGIRequestHandler.server_version = "WebServer"
+WSGIRequestHandler.sys_version = ""
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 csrf = CSRFProtect(app)
 app.secret_key = secrets.token_hex(32)  # Generate a random secret key
@@ -35,6 +38,8 @@ LOCKOUT_TIME = timedelta(minutes=5)  # Lockout duration after exceeding max atte
 CSP_POLICY = {
     "default-src": "'self'",
     "img-src": "'self' data:",
+    "form-action": "'self'",
+    "base-uri": "'self'",
     "frame-ancestors": "'none'",
     "report-uri" : "",
 }
